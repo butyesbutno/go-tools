@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"io"
 )
 
 /*CBC加密 按照golang标准库的例子代码
@@ -28,7 +26,7 @@ func PKCS7UnPadding(origData []byte) []byte {
 }
 
 //aes加密，填充模式由key决定，16位，24,32分别对应AES-128, AES-192, or AES-256.源码好像是写死16了
-func AesCBCEncrypt(rawData, key []byte) ([]byte, error) {
+func AesCBCEncrypt(rawData, key, iv []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return []byte{}, err
@@ -39,21 +37,16 @@ func AesCBCEncrypt(rawData, key []byte) ([]byte, error) {
 
 	rawData = PKCS7Padding(rawData, blockSize)
 	//初始向量IV必须是唯一，但不需要保密
-	cipherText := make([]byte, blockSize+len(rawData))
-	//block大小 16
-	iv := cipherText[:blockSize]
-	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-		return []byte{}, err
-	}
+	cipherText := make([]byte, len(rawData))
 
 	//block大小和初始向量大小一定要一致
 	mode := cipher.NewCBCEncrypter(block, iv)
-	mode.CryptBlocks(cipherText[blockSize:], rawData)
+	mode.CryptBlocks(cipherText, rawData)
 
 	return cipherText, nil
 }
 
-func AesCBCDncrypt(encryptData, key []byte) ([]byte, error) {
+func AesCBCDncrypt(encryptData, key, iv []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return []byte{}, err
@@ -64,8 +57,7 @@ func AesCBCDncrypt(encryptData, key []byte) ([]byte, error) {
 	if len(encryptData) < blockSize {
 		return []byte{}, errors.New("ciphertext too short")
 	}
-	iv := encryptData[:blockSize]
-	encryptData = encryptData[blockSize:]
+	encryptData = encryptData[:]
 
 	// CBC mode always works in whole blocks.
 	if len(encryptData)%blockSize != 0 {
@@ -81,20 +73,20 @@ func AesCBCDncrypt(encryptData, key []byte) ([]byte, error) {
 	return encryptData, nil
 }
 
-func Encrypt(rawData, key []byte) (string, error) {
-	data, err := AesCBCEncrypt(rawData, key)
+func Encrypt(rawData, key, iv []byte) (string, error) {
+	data, err := AesCBCEncrypt(rawData, key, iv)
 	if err != nil {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(data), nil
 }
 
-func Decrypt(rawData string, key []byte) (string, error) {
+func Decrypt(rawData string, key, iv []byte) (string, error) {
 	data, err := base64.StdEncoding.DecodeString(rawData)
 	if err != nil {
 		return "", err
 	}
-	dnData, err := AesCBCDncrypt(data, key)
+	dnData, err := AesCBCDncrypt(data, key, iv)
 	if err != nil {
 		return "", err
 	}
