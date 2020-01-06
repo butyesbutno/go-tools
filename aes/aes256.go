@@ -6,6 +6,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"io"
 )
 
@@ -30,7 +31,7 @@ func PKCS7UnPadding(origData []byte) []byte {
 func AesCBCEncrypt(rawData, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		panic(err)
+		return []byte{}, err
 	}
 
 	//填充原文
@@ -42,7 +43,7 @@ func AesCBCEncrypt(rawData, key []byte) ([]byte, error) {
 	//block大小 16
 	iv := cipherText[:blockSize]
 	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-		panic(err)
+		return []byte{}, err
 	}
 
 	//block大小和初始向量大小一定要一致
@@ -55,20 +56,20 @@ func AesCBCEncrypt(rawData, key []byte) ([]byte, error) {
 func AesCBCDncrypt(encryptData, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		panic(err)
+		return []byte{}, err
 	}
 
 	blockSize := block.BlockSize()
 
 	if len(encryptData) < blockSize {
-		panic("ciphertext too short")
+		return []byte{}, errors.New("ciphertext too short")
 	}
 	iv := encryptData[:blockSize]
 	encryptData = encryptData[blockSize:]
 
 	// CBC mode always works in whole blocks.
 	if len(encryptData)%blockSize != 0 {
-		panic("ciphertext is not a multiple of the block size")
+		return []byte{}, errors.New("ciphertext is not a multiple of the block size")
 	}
 
 	mode := cipher.NewCBCDecrypter(block, iv)
@@ -99,7 +100,6 @@ func Decrypt(rawData string, key []byte) (string, error) {
 	}
 	return string(dnData), nil
 }
-
 
 func EcbDecrypt(data, key []byte) []byte {
 	block, _ := aes.NewCipher(key)
