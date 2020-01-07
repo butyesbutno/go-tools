@@ -63,10 +63,7 @@ func init() {
 
 func getLogFileName(t time.Time) string {
 	day := t.Format("20060102")
-	curDir := getBaseDiskPath()
-
-	//curDir, _ := os.Getwd()
-	logDir := path.Join(curDir, "log")
+	logDir := getBaseDiskPath()
 
 	if _, err := os.Stat(logDir); os.IsNotExist(err) {
 		if er := os.MkdirAll(logDir, 0666); er != nil {
