@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"time"
-	"fmt"
 	"math/rand"
 
 	"go.etcd.io/etcd/clientv3"
