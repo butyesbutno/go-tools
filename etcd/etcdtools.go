@@ -90,13 +90,18 @@ func GetServiceRoundRobin(etcdAddress, prefix string) string {
 		return ""
 	}
 
-	l := len(list)
+	listLen := len(list)
+	if listLen < 1 {
+		return ""
+	}
+
+	rand.Seed(time.Now().UnixNano())
+	l := listLen
 	if l < 100 {
 		l = 100
 	}
-	rand.Seed(time.Now().UnixNano())
 	r := rand.Intn(l)
-	if r >= len(list) {
+	if r >= listLen {
 		r = r % 3
 	}
 
