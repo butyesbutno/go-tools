@@ -9,6 +9,7 @@ import (
 
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
+	"github.com/butyesbutno/go-tools/log"
 )
 
 const (
@@ -163,7 +164,7 @@ func putServiceImpl(etcdAddress, key, value string, ttl int) {
 				}
 				theLeaseID = leaseResp.ID
 				lastLeaseTime = time.Now()
-				fmt.Println("PutService: " + key + "<->" + "value")
+				commonLog.LogInfo("PutService: " + key + "<->" + "value")
 			} else {
 				tm := time.Now()
 				expectT := lastLeaseTime.Add(time.Duration( (ttl * 1000) - 500) * time.Millisecond)
