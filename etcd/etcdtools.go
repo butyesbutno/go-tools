@@ -94,6 +94,9 @@ func GetServiceRoundRobin(etcdAddress, prefix string) string {
 	if listLen < 1 {
 		return ""
 	}
+	if listLen == 1 {
+		return list[0]
+	}
 
 	rand.Seed(time.Now().UnixNano())
 	l := listLen
@@ -102,7 +105,7 @@ func GetServiceRoundRobin(etcdAddress, prefix string) string {
 	}
 	r := rand.Intn(l)
 	if r >= listLen {
-		r = r % 3
+		r = r % listLen
 	}
 
 	return list[r]
@@ -116,7 +119,6 @@ func PutService(etcdAddress, key, value string, ttl int) {
 // putServiceImpl
 func putServiceImpl(etcdAddress, key, value string, ttl int) {
 	key = strings.TrimRight(key, "/") + "/"
-	ctx, _ := context.WithTimeout(context.TODO(), OpTimeout * time.Second)
 	
 	for {
 		select {
@@ -150,6 +152,7 @@ func putServiceImpl(etcdAddress, key, value string, ttl int) {
 			}
 
 			if theLeaseID == 0 {
+				ctx, _ := context.WithTimeout(context.TODO(), OpTimeout * time.Second)
 				leaseResp, err := lease.Grant(ctx, int64(ttl))
 				if err != nil {
 					client.Close()
@@ -157,6 +160,7 @@ func putServiceImpl(etcdAddress, key, value string, ttl int) {
 				}
 
 				// key := key + fmt.Sprintf("%d", leaseResp.ID)
+				ctx, _ = context.WithTimeout(context.TODO(), OpTimeout * time.Second)
 				if _, err := kv.Put(ctx, key, value, clientv3.WithLease(leaseResp.ID)); err != nil {
 					client.Close()
 					break
@@ -169,6 +173,7 @@ func putServiceImpl(etcdAddress, key, value string, ttl int) {
 				expectT := lastLeaseTime.Add(time.Duration( (ttl * 1000) - 500) * time.Millisecond)
 				if tm.Before(expectT) == false {
 					// 续约租约，如果租约已经过期将theLeaseID复位到0重新走创建租约的逻辑
+					ctx, _ := context.WithTimeout(context.TODO(), OpTimeout * time.Second)
 					if _, err := lease.KeepAliveOnce(ctx, theLeaseID); err == rpctypes.ErrLeaseNotFound {
 						theLeaseID = 0
 						continue
