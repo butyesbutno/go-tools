@@ -163,7 +163,7 @@ func putServiceImpl(etcdAddress, key, value string, ttl int) {
 				}
 				theLeaseID = leaseResp.ID
 				lastLeaseTime = time.Now()
-				commonLog.LogInfo("PutService: " + key + "<->" + "value")
+				commonLog.LogInfo("PutService: " + key + "<->" + value)
 			} else {
 				tm := time.Now()
 				expectT := lastLeaseTime.Add(time.Duration( (ttl * 1000) - 500) * time.Millisecond)
