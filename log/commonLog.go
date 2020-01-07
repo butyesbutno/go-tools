@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -36,6 +37,7 @@ const (
 var (
 	localLogutil *LogUtil
 	LogPrefix = "lock-"
+	BaseLogPath = "./log/"
 )
 
 func init() {
@@ -61,7 +63,7 @@ func init() {
 
 func getLogFileName(t time.Time) string {
 	day := t.Format("20060102")
-	curDir := GetBaseDiskPath()
+	curDir := getBaseDiskPath()
 
 	//curDir, _ := os.Getwd()
 	logDir := path.Join(curDir, "log")
@@ -176,4 +178,11 @@ func LogInfo(format string, v ...interface{}) {
 	if localLogutil.Level >= INFO {
 		baseLog("INFO ", format, v...)
 	}
+}
+
+// getBaseDiskPath go-web server base path
+func getBaseDiskPath() string {
+	curDir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
+	curDir = filepath.Join(curDir, BaseLogPath)
+	return curDir
 }
