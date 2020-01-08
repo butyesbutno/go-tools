@@ -9,7 +9,7 @@ package myjwt
 
 import (
 	"errors"
-	"log"
+	"strings"
 	"net/http"
 	"time"
 
@@ -110,7 +110,8 @@ func (j *JWT) RefreshToken(tokenString string) (string, error) {
 //NewJwtMiddleWare create jwt middleware
 func NewJwtMiddleWare() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token := c.Request.Header.Get("token")
+		token := c.Request.Header.Get("Authorization")
+		token = strings.Replace(token, "Bearer ", "", -1)
 		if token == "" {
 			c.JSON(http.StatusOK, gin.H{
 				"status": -1,
@@ -119,8 +120,6 @@ func NewJwtMiddleWare() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-
-		log.Print("get token: ", token)
 
 		j := NewJWT()
 		// parseToken 解析token包含的信息
