@@ -6,6 +6,11 @@ import (
 	"time"
 	"math/rand"
 
+	"errors"
+	"io/ioutil"
+	"crypto/tls"
+	"crypto/x509"	
+
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
 	"github.com/butyesbutno/tools/go/log"
@@ -18,16 +23,70 @@ const (
 var (
 	chanExitCmd = make(chan int)
 	etcdClient *clientv3.Client
+	etcdConfig = clientv3.Config{
+		Endpoints:   []string{"localhost:2379"}, //"localhost:2379"},
+		DialTimeout: 5 * time.Second,
+		// Transport: client.DefaultTransport,
+		// Username:  etcdUsername,
+		// Password:  etcdPassword,
+	}
 )
 
-func setupConnect(etcdAddress string) error {
+// GetEtcdConfig current etcd config
+func GetEtcdConfig() *clientv3.Config {
+	return &etcdConfig
+}
+
+// SetEtcdConfig current etcd config
+func SetEtcdConfig(config *clientv3.Config) {
+	etcdConfig = *config
+	closeConnect()
+}
+
+// SetTLSConfig set tls config
+func SetTLSConfig(etcdCert, etcdCertKey, etcdCa string, endpoints []string) error {
+	cert, err := tls.LoadX509KeyPair(etcdCert, etcdCertKey)
+	if err != nil {
+		return errors.New("tls failed")
+	}
+
+	caData, err := ioutil.ReadFile(etcdCa)
+	if err != nil {
+		return errors.New("tls failed read file")
+	}
+
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM(caData)
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      pool,
+	}
+
+	etcdConfig = clientv3.Config{
+		Endpoints: endpoints,
+		DialTimeout: 5 * time.Second,
+		TLS:       tlsConfig,
+	}
+	closeConnect()
+	return nil
+}
+
+// close connection to etcd endpoint
+func closeConnect() {
+	if etcdClient == nil {
+		return
+	}
+	etcdClient.Close()
+	etcdClient = nil
+}
+
+// setup connection to etcd endpoint
+func setupConnect( ) error {
 	if etcdClient != nil {
 		return nil
 	}
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{etcdAddress}, //"localhost:2379"},
-		DialTimeout: 5 * time.Second,
-	})
+	client, err := clientv3.New(etcdConfig)
 	if err != nil {
 		return err
 	}
@@ -36,9 +95,9 @@ func setupConnect(etcdAddress string) error {
 }
 
 // GetKey get value with prefix
-func GetKey(etcdAddress, prefix string) ([]string, error) {
+func GetKey(prefix string) ([]string, error) {
 
-	if err := setupConnect(etcdAddress); err != nil {
+	if err := setupConnect(); err != nil {
 		return nil, err
 	}
 
@@ -47,8 +106,7 @@ func GetKey(etcdAddress, prefix string) ([]string, error) {
 	ctx, _ := context.WithTimeout(context.TODO(), OpTimeout * time.Second)
 	rangeResp, err := kv.Get(ctx, prefix, clientv3.WithPrefix())
 	if err != nil {
-		etcdClient.Close()
-		etcdClient = nil
+		closeConnect()
 		return nil, err
 	}
 
@@ -61,17 +119,16 @@ func GetKey(etcdAddress, prefix string) ([]string, error) {
 }
 
 // SetKey key value exist forever
-func SetKey(etcdAddress, key, value string) error {
+func SetKey(key, value string) error {
 
-	if err := setupConnect(etcdAddress); err != nil {
+	if err := setupConnect(); err != nil {
 		return err
 	}
 
 	kv := clientv3.NewKV(etcdClient)
 	ctx, _ := context.WithTimeout(context.TODO(), OpTimeout * time.Second)
 	if _, err := kv.Put(ctx, key, value, clientv3.WithPrevKV()); err != nil {
-		etcdClient.Close()
-		etcdClient = nil
+		closeConnect()
 		return err
 	}
 	return nil
@@ -84,8 +141,8 @@ func StopETCDRegister() {
 }
 
 // GetServiceRoundRobin get service by round-robin
-func GetServiceRoundRobin(etcdAddress, prefix string) string {
-	list, err := GetKey(etcdAddress, prefix)
+func GetServiceRoundRobin(prefix string) string {
+	list, err := GetKey(prefix)
 	if err != nil {
 		return ""
 	}
@@ -112,12 +169,12 @@ func GetServiceRoundRobin(etcdAddress, prefix string) string {
 }
 
 // PutService register the service
-func PutService(etcdAddress, key, value string, ttl int) {
-	go putServiceImpl(etcdAddress, key, value, ttl)
+func PutService(key, value string, ttl int) {
+	go putServiceImpl(key, value, ttl)
 }
 
 // putServiceImpl
-func putServiceImpl(etcdAddress, key, value string, ttl int) {
+func putServiceImpl(key, value string, ttl int) {
 	key = strings.TrimRight(key, "/") + "/"
 	
 	for {
@@ -128,10 +185,7 @@ func putServiceImpl(etcdAddress, key, value string, ttl int) {
 		default:
 		}
 
-		client, err := clientv3.New(clientv3.Config{
-			Endpoints:   []string{etcdAddress}, //"localhost:2379"},
-			DialTimeout: 5 * time.Second,
-		})
+		client, err := clientv3.New(etcdConfig)
 		if err != nil {
 			time.Sleep(time.Duration(1) * time.Second)
 			continue
