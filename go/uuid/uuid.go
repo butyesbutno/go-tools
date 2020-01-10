@@ -18,7 +18,7 @@ var objectIdCounter uint32 = 0
 
 // machineId stores machine id generated once and used in subsequent calls
 // to NewObjectId function.
-var machineId = readMachineId()
+var machineId []byte
 
 // ObjectId is a unique ID identifying a BSON value. It must be exactly 12 bytes
 // long. MongoDB objects by default have such a property set in their "_id"
@@ -61,6 +61,9 @@ func readMachineId() []byte {
 // 3byte 自增ID
 func NewObjectId() ObjectId {
 	var b [12]byte
+	if machineId == nil || len(machineId) < 1 {
+		machineId = readMachineId()
+	}
 	// Timestamp, 4 bytes, big endian
 	binary.BigEndian.PutUint32(b[:], uint32(time.Now().Unix()))
 	// Machine, first 3 bytes of md5(hostname)
