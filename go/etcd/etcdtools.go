@@ -118,8 +118,8 @@ func GetKey(prefix string) ([]string, error) {
 	return list, nil
 }
 
-// SetKey key value exist forever
-func SetKey(key, value string) error {
+// SetKey key value, ttl<=0 means exist forever. otherwise your need refresh manually
+func SetKey(key, value string, secondsTTL int) error {
 
 	if err := setupConnect(); err != nil {
 		return err
@@ -127,9 +127,24 @@ func SetKey(key, value string) error {
 
 	kv := clientv3.NewKV(etcdClient)
 	ctx, _ := context.WithTimeout(context.TODO(), OpTimeout * time.Second)
-	if _, err := kv.Put(ctx, key, value, clientv3.WithPrevKV()); err != nil {
-		closeConnect()
-		return err
+	if secondsTTL > 0 {
+		lease := clientv3.NewLease(client)
+		leaseResp, lerr := lease.Grant(ctx, int64(secondsTTL))
+		if lerr != nil {
+			closeConnect()
+			return lerr
+		}
+
+		ctx, _ = context.WithTimeout(context.TODO(), OpTimeout * time.Second)
+		if _, perr := kv.Put(ctx, key, value, clientv3.WithLease(leaseResp.ID)); perr != nil {
+			closeConnect()
+			return perr
+		}
+	} else {
+		if _, err := kv.Put(ctx, key, value, clientv3.WithPrevKV()); err != nil {
+			closeConnect()
+			return err
+		}
 	}
 	return nil
 }
