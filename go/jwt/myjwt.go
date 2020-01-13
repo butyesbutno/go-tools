@@ -108,14 +108,14 @@ func (j *JWT) RefreshToken(tokenString string) (string, error) {
 }
 
 //NewJwtMiddleWare create jwt middleware
-func NewJwtMiddleWare() gin.HandlerFunc {
+func NewJwtMiddleWare(invalidCode int, invalidMsg string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := c.Request.Header.Get("Authorization")
 		token = strings.Replace(token, "Bearer ", "", -1)
 		if token == "" {
 			c.JSON(http.StatusOK, gin.H{
-				"status": -1,
-				"msg":    "请求未携带token，无权限访问",
+				"code": invalidCode,
+				"msg":  invalidMsg,
 			})
 			c.Abort()
 			return
@@ -127,15 +127,15 @@ func NewJwtMiddleWare() gin.HandlerFunc {
 		if err != nil {
 			if err == TokenExpired {
 				c.JSON(http.StatusOK, gin.H{
-					"status": -1,
-					"msg":    "授权已过期",
+					"code": invalidCode,
+					"msg":  invalidMsg,
 				})
 				c.Abort()
 				return
 			}
 			c.JSON(http.StatusOK, gin.H{
-				"status": -1,
-				"msg":    err.Error(),
+				"code": invalidCode,
+				"msg":  invalidMsg,
 			})
 			c.Abort()
 			return
