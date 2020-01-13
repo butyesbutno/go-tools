@@ -128,7 +128,7 @@ func SetKey(key, value string, secondsTTL int) error {
 	kv := clientv3.NewKV(etcdClient)
 	ctx, _ := context.WithTimeout(context.TODO(), OpTimeout * time.Second)
 	if secondsTTL > 0 {
-		lease := clientv3.NewLease(client)
+		lease := clientv3.NewLease(etcdClient)
 		leaseResp, lerr := lease.Grant(ctx, int64(secondsTTL))
 		if lerr != nil {
 			closeConnect()
