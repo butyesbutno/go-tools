@@ -37,9 +37,15 @@ func GetEtcdConfig() *clientv3.Config {
 	return &etcdConfig
 }
 
-// SetEtcdConfig current etcd config
-func SetEtcdConfig(config *clientv3.Config) {
-	etcdConfig = *config
+// SetHTTPHost http connection / without tls
+func SetHTTPHost(endpoints []string) {
+	etcdConfig = clientv3.Config{
+		Endpoints:   endpoints, //"localhost:2379"},
+		DialTimeout: 5 * time.Second,
+		// Transport: client.DefaultTransport,
+		// Username:  etcdUsername,
+		// Password:  etcdPassword,
+	}
 	closeConnect()
 }
 
