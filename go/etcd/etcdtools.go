@@ -2,28 +2,29 @@ package etcdtools
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"strings"
 	"time"
-	"math/rand"
 
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"io/ioutil"
-	"crypto/tls"
-	"crypto/x509"	
 
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/etcdserver/api/v3rpc/rpctypes"
-	"github.com/butyesbutno/tools/go/log"
 )
 
 const (
 	// OpTimeout operator timeout
 	OpTimeout = 5
 )
+
 var (
 	chanExitCmd = make(chan int)
-	etcdClient *clientv3.Client
-	etcdConfig = clientv3.Config{
+	etcdClient  *clientv3.Client
+	etcdConfig  = clientv3.Config{
 		Endpoints:   []string{"localhost:2379"}, //"localhost:2379"},
 		DialTimeout: 5 * time.Second,
 		// Transport: client.DefaultTransport,
@@ -70,9 +71,9 @@ func SetTLSConfig(etcdCert, etcdCertKey, etcdCa string, endpoints []string) erro
 	}
 
 	etcdConfig = clientv3.Config{
-		Endpoints: endpoints,
+		Endpoints:   endpoints,
 		DialTimeout: 5 * time.Second,
-		TLS:       tlsConfig,
+		TLS:         tlsConfig,
 	}
 	closeConnect()
 	return nil
@@ -88,7 +89,7 @@ func closeConnect() {
 }
 
 // setup connection to etcd endpoint
-func setupConnect( ) error {
+func setupConnect() error {
 	if etcdClient != nil {
 		return nil
 	}
@@ -109,7 +110,7 @@ func GetKey(prefix string) ([]string, error) {
 
 	// Get operator
 	kv := clientv3.NewKV(etcdClient)
-	ctx, _ := context.WithTimeout(context.TODO(), OpTimeout * time.Second)
+	ctx, _ := context.WithTimeout(context.TODO(), OpTimeout*time.Second)
 	rangeResp, err := kv.Get(ctx, prefix, clientv3.WithPrefix())
 	if err != nil {
 		closeConnect()
@@ -132,7 +133,7 @@ func SetKey(key, value string, secondsTTL int) error {
 	}
 
 	kv := clientv3.NewKV(etcdClient)
-	ctx, _ := context.WithTimeout(context.TODO(), OpTimeout * time.Second)
+	ctx, _ := context.WithTimeout(context.TODO(), OpTimeout*time.Second)
 	if secondsTTL > 0 {
 		lease := clientv3.NewLease(etcdClient)
 		leaseResp, lerr := lease.Grant(ctx, int64(secondsTTL))
@@ -141,7 +142,7 @@ func SetKey(key, value string, secondsTTL int) error {
 			return lerr
 		}
 
-		ctx, _ = context.WithTimeout(context.TODO(), OpTimeout * time.Second)
+		ctx, _ = context.WithTimeout(context.TODO(), OpTimeout*time.Second)
 		if _, perr := kv.Put(ctx, key, value, clientv3.WithLease(leaseResp.ID)); perr != nil {
 			closeConnect()
 			return perr
@@ -197,7 +198,7 @@ func PutService(key, value string, ttl int) {
 // putServiceImpl
 func putServiceImpl(key, value string, ttl int) {
 	key = strings.TrimRight(key, "/") + "/"
-	
+
 	for {
 		select {
 		case <-chanExitCmd:
@@ -227,7 +228,7 @@ func putServiceImpl(key, value string, ttl int) {
 			}
 
 			if theLeaseID == 0 {
-				ctx, _ := context.WithTimeout(context.TODO(), OpTimeout * time.Second)
+				ctx, _ := context.WithTimeout(context.TODO(), OpTimeout*time.Second)
 				leaseResp, err := lease.Grant(ctx, int64(ttl))
 				if err != nil {
 					client.Close()
@@ -235,24 +236,32 @@ func putServiceImpl(key, value string, ttl int) {
 				}
 
 				// key := key + fmt.Sprintf("%d", leaseResp.ID)
-				ctx, _ = context.WithTimeout(context.TODO(), OpTimeout * time.Second)
+				ctx, _ = context.WithTimeout(context.TODO(), OpTimeout*time.Second)
 				if _, err := kv.Put(ctx, key, value, clientv3.WithLease(leaseResp.ID)); err != nil {
 					client.Close()
 					break
 				}
 				theLeaseID = leaseResp.ID
 				lastLeaseTime = time.Now()
-				commonLog.LogInfo("PutService: " + key + "<->" + value)
+				//commonLog.LogInfo("PutService: " + key + "<->" + value)
+				fmt.Println("PutService: " + key + "<->" + value)
 			} else {
 				tm := time.Now()
-				expectT := lastLeaseTime.Add(time.Duration( (ttl * 1000) - 500) * time.Millisecond)
+				expectT := lastLeaseTime.Add(time.Duration((ttl*1000)-500) * time.Millisecond)
 				if tm.Before(expectT) == false {
 					// 续约租约，如果租约已经过期将theLeaseID复位到0重新走创建租约的逻辑
-					ctx, _ := context.WithTimeout(context.TODO(), OpTimeout * time.Second)
-					if _, err := lease.KeepAliveOnce(ctx, theLeaseID); err == rpctypes.ErrLeaseNotFound {
-						theLeaseID = 0
-						continue
-					} 
+					ctx, _ := context.WithTimeout(context.TODO(), OpTimeout*time.Second)
+					_, err := lease.KeepAliveOnce(ctx, theLeaseID)
+					if err != nil {
+						if err == rpctypes.ErrLeaseNotFound {
+							theLeaseID = 0
+							continue
+						} else {
+							fmt.Println("KeepAliveOnce failed: " + err.Error())
+							client.Close()
+							break
+						}
+					}
 					lastLeaseTime = tm
 				}
 			}
