@@ -15,12 +15,14 @@ import (
 
 //LogUtil log util
 type LogUtil struct {
-	Logger *log.Logger
-	Level  int
-	Enable bool
-	File   *os.File
-	Time   time.Time
-	Locker *sync.Mutex
+	Logger      *log.Logger
+	Level       int
+	Enable      bool
+	File        *os.File
+	Time        time.Time
+	Locker      *sync.Mutex
+	DstFileName string
+	SrcFileName string
 }
 
 const (
@@ -36,16 +38,16 @@ const (
 
 var (
 	localLogutil *LogUtil
-	LogPrefix = "lock-"
-	BaseLogPath = "./log/"
+	LogPrefix    = "lock"
+	BaseLogPath  = "./log/"
 )
 
 func init() {
-	fileName := getLogFileName(time.Now())
-	logFile, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	SrcFileName := getLogFileName(time.Now(), true)
+	logFile, err := os.OpenFile(SrcFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		fmt.Printf("Failed to open file in log.init. %s", err.Error())
-		//panic(fileName)
+		//panic(SrcFileName)
 	}
 
 	write := io.MultiWriter(logFile, os.Stdout)
@@ -54,14 +56,16 @@ func init() {
 	localLogutil = &LogUtil{
 		Logger: log.New(write, "",
 			log.Ldate|log.Ltime|log.Lmicroseconds|log.Lshortfile),
-		Level:  INFO,
-		Enable: true,
-		File:   logFile,
-		Time:   time.Now(),
-		Locker: new(sync.Mutex)}
+		Level:       INFO,
+		Enable:      true,
+		File:        logFile,
+		Time:        time.Now(),
+		SrcFileName: SrcFileName,
+		DstFileName: getLogFileName(time.Now(), false),
+		Locker:      new(sync.Mutex)}
 }
 
-func getLogFileName(t time.Time) string {
+func getLogFileName(t time.Time, noprefix bool) string {
 	day := t.Format("20060102")
 	logDir := getBaseDiskPath()
 
@@ -72,7 +76,10 @@ func getLogFileName(t time.Time) string {
 		}
 	}
 
-	fileName := path.Join(logDir, LogPrefix+day+".log")
+	fileName := path.Join(logDir, LogPrefix+"-"+day+".log")
+	if noprefix {
+		fileName = path.Join(logDir, LogPrefix+".log")
+	}
 	return fileName
 }
 
@@ -86,23 +93,29 @@ func rotateLog() {
 	if tNow.Day() == localLogutil.Time.Day() {
 		return
 	}
-	localLogutil.File.Close()
+	localLogutil.File.Sync()
+	copyFile(localLogutil.SrcFileName, localLogutil.DstFileName)
+	os.Truncate(localLogutil.SrcFileName, 0)
+	localLogutil.File.Seek(0, 0)
 	localLogutil.Time = tNow
+	localLogutil.DstFileName = getLogFileName(tNow, false)
+	// localLogutil.File.Close()
+	// localLogutil.Time = tNow
 
-	fileName := getLogFileName(tNow)
+	// fileName := getLogFileName(tNow)
 
-	logFile, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		fmt.Printf("Failed to open file in log.init. %s", err.Error())
-		panic(fileName)
-	}
-	localLogutil.File = logFile
-	write := io.MultiWriter(logFile, os.Stdout)
-	gin.DefaultWriter = write
-	gin.DefaultErrorWriter = write
+	// logFile, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	// if err != nil {
+	// 	fmt.Printf("Failed to open file in log.init. %s", err.Error())
+	// 	panic(fileName)
+	// }
+	// localLogutil.File = logFile
+	// write := io.MultiWriter(logFile, os.Stdout)
+	// gin.DefaultWriter = write
+	// gin.DefaultErrorWriter = write
 
-	localLogutil.Logger = log.New(write, "",
-		log.Ldate|log.Ltime|log.Lmicroseconds|log.Lshortfile)
+	// localLogutil.Logger = log.New(write, "",
+	// 	log.Ldate|log.Ltime|log.Lmicroseconds|log.Lshortfile)
 }
 
 //LogSetoutput set output
@@ -182,4 +195,33 @@ func getBaseDiskPath() string {
 	curDir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
 	curDir = filepath.Join(curDir, BaseLogPath)
 	return curDir
+}
+
+func copyFile(srcFilePath, dstFilePath string) error {
+	source, serr := os.Open(srcFilePath)
+	if serr != nil {
+		fmt.Printf("Open source file failed=%v\n", serr)
+		return serr
+	}
+	defer source.Close()
+	destination, werr := os.OpenFile(dstFilePath, os.O_WRONLY|os.O_CREATE, 0666)
+	if werr != nil {
+		fmt.Printf("Open target file failed=%v\n", werr)
+		return werr
+	}
+	buf := make([]byte, 1024*1024)
+	for {
+		n, err := source.Read(buf)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		if n == 0 {
+			break
+		}
+
+		if _, err2 := destination.Write(buf[:n]); err2 != nil {
+			return err2
+		}
+	}
+	return nil
 }
